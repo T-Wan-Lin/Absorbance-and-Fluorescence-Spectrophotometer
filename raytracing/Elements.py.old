@@ -1,0 +1,57 @@
+import CSG
+import scipy
+import math
+
+class Material:
+	"Properties of an optical material"
+	def __init__(self, refractiveindex):
+		self.n = refractiveindex
+	def refractiveindex(self, wavelength): return self.n
+
+
+class LightRay(CSG.Ray):
+	"An optical ray"
+	def __init__(self, origin, direction, wavelength):
+		CSG.Ray.__init__(self,origin, direction)
+		self.wavelength = wavelength
+	def propagate(self, components):
+		# find the nearest intersecting component
+		intersects = [(co, co.intersect(self)) for co in components]
+		intersects = [x for x in intersects if x[1] is not None]
+		if len(intersects) is 0: return None
+		intersectingcomponent = min(intersects, key=lambda i: (self.anchor - i[1].anchor).norm())[0]
+		# interact at the surface
+		return intersectingcomponent.interact(self)
+
+class Component:
+	"An optical component"
+	def __init__(self, shape, material):
+		self.shape = shape
+		self.material = material
+	def __repr__(self):
+		return "Component(shape: %s, material: %s)"%(self.shape, self.material);
+	def intersect(self, lightray):
+		return self.shape.intersect(lightray)
+	def interact(self, lightray):
+		"Return the resulting ray after interaction with a surface"
+		intersection = self.intersect(lightray)
+		print "next intersection:", intersection
+		n = intersection.vector
+		k = lightray.vector
+		nk = n*k
+		k_perp = n * nk
+		k_par = k - k_perp
+		l_par = k_par
+		if nk < 0: l = self.material.refractiveindex(lightray.wavelength)
+		else: l = 1.0/self.material.refractiveindex(lightray.wavelength)
+		lp2 = l**2 - l_par*l_par
+		if lp2 < 0:
+			# total internal reflection
+			return LightRay(intersection.anchor, k_par - k_perp, lightray.wavelength)
+		if nk < 0: l_perp = -n * math.sqrt(lp2)
+		else: l_perp = n * math.sqrt(lp2)
+		l = (l_par + l_perp).normalize()
+		#~ return LightRay(intersection.anchor + l*1e-3, l, lightray.wavelength)
+		return LightRay(intersection.anchor, l, lightray.wavelength)
+
+
